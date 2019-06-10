@@ -1,0 +1,173 @@
+---
+title: "Biomechanical Features of Orthopedic Patients"
+author: "Pamela Gipe"
+date: "6/6/2019"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The dataset Biomechanical Features of Orthopedic Patients was downloaded from Kaggle, and was selected based on a a clear expectation that the variables included could provide reasonable predictions for certain outcomes. There were two datasets that included 6 independent variables, specificially physical charateristics (the shape and orientation) of the spine and pelvis regions. There was also a column for the diagnosis of the spine, which included either three outcomes or two outcomes depending on the dataset. The relationships between the outcomes and the independent variables was evaluated for this project. 
+
+# Summary
+
+The data was previously cleaned and curated by Kaggle, so there was not much more to be done. The data was analyzed for missing values but none were found. There were two .csv files in the dataset, and both were used in this project. One dataset (3C_weka) had three outcomes, and the other (2C_weka), had two outcomes, identified as 'Normal' and 'Abnormal'. These outcomes were converted to factors in order to anaylze them. Initially exploratory analysis and data visualization was performed separately on the dataset with three outcomes which showed an overview of the data, but then the use of an early stage Random Forest led to the observation that one variable(degree_spondylolisthesis) had more influence over the outcomes than the other variables. 
+
+Based on this observation simple linear regression was run (one variable), which showed less correlation than expected. Then exploratory analysis and data visualization was performed on the second dataset(2c_weka), This second dataset was then split into two groups, one with 80% of the data for training purposes, and the other with the remaining 20% of the data for validation and testing. This allowed for the machine learning processes, specifically KNN, Random Forest, and a classification tree  to see if there were more robust algorythms that could predict outcomes better. The second dataset was used for this more complex set of analyses because two of the outcomes could be classified as abnormal, and it made more sense to evaluate them together rather than trying to predict two different abnormal outcomes and one normal outcome. Another approach would have been to merge the two datasets, and predict either the three outcomes or the two outcomes. It seemed cleaner to keep the datasets separate however.
+
+# Methods
+Data exploration was done through the use of ggplot generating a bar graph illustrating the different numbers of the three outcomes, Hernia, Spondylothisthesis and Normal. A summary of the first dataset was also provided. A correlation of all the variables (except the outcomes) was also performed in order to see what variables were influencing other variables and to what extent.
+
+An initial statistical analysis was performed on the first dataset. A Random Forest evaluation provided MSE (mean squared error) values for each variable. A tree visualization supported the results of the random forest evaluation.
+
+At this point exploratory data analysis was performed on the second dataset, in which the outcomes had been combined into just two, with hernia and Spondylothisthesis combined into one outcome defined as abnormal. Here the same data exploration was done to see if there were major differences. The correlation was not done again because the data in those columns was the same. 
+
+The next step was to examine the data usin machine learning techniques. The data from dataset two were split into a training set (80% of the data), and a validation/test set (20%) of the data. Two machine learning techniques were evaluated, K nearest neighbors (KNN), which is a simple algorithm that calculates distances between variables and outcomes, and rpart, which evaluates a series of factors to determine the one most effective at generating a classification tree. Rpart was also used earlier in the analysis, but without separating into training and validation sets.  
+
+# Results
+```{r}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+library(gridExtra)
+library(ggplot2)
+library(randomForest)
+library(rpart)
+library(dplyr)
+library(corrplot)
+library(e1071)
+#Data collection
+dl <- tempfile()
+download.file("https://github.com/pjg2016/chooseyourown/files/3267565/CYO.zip", dl)
+dataset <- read.csv(unzip(dl, "3C_weka.csv"))
+dataset_two <- read.csv(unzip(dl, "2C_weka.csv"))
+dataset$class<-as.factor(dataset$class)
+rm(dl)
+
+#Random Forest to identify variables with most influence
+set.seed(1)
+rf_spine<-randomForest(class~.,data = dataset)
+RF_importance <- importance(rf_spine)
+RF_dataframe <- data.frame((RF_importance), MSE = RF_importance[,1])
+
+#Tree visualization ~ supporting Random Forest dataframe
+fit<- rpart(dataset$class~., data = dataset)
+
+#Exploratory analysis, Dataset 2
+dataset_two$class<-as.factor(dataset_two$class)
+
+#Random Forest to identify variables with most influence, Dataset 2
+set.seed(1)
+rf_spine_two<-randomForest(class~.,data = dataset_two)
+RF_importance_two <- importance(rf_spine_two)
+RF_dataframe_two <- data.frame((RF_importance_two), MSE = RF_importance_two[,1])
+
+#Tree visualization ~ supporting Random Forest dataframe
+fit_two<- rpart(dataset_two$class~., data = dataset_two)
+
+#create training and test sets
+stats_index <- createDataPartition(dataset_two$class, p=0.80, list=FALSE)
+ #select 20% of the data for testing the models
+test <- dataset_two[-stats_index,]
+ #use the remaining 80% of data for training the models
+datasetTR <- dataset_two[stats_index,]
+
+#knn 
+set.seed(1)
+knnfit <- train(class ~ ., method = "knn",
+             tuneGrid = data.frame(k = seq(1, 15, 2)),
+             data = datasetTR)
+
+#classification tree
+train_rpart <-train(class ~ ., method = "rpart",
+tuneGrid = data.frame(cp = seq(0,0.1, len = 25)),
+data = datasetTR)
+
+```
+
+## Exploratory Data Analysis Dataset 1 ~ Comparing counts of Hernia, Spondylothisthesis and Normal Outcomes
+ 
+```{r, echo=FALSE}
+ggplot(dataset,aes(x=class,fill=class))+geom_bar(stat = 'count')
+```
+
+## Exploratory Data Analysis Dataset 1 ~ Five Number Summary including Mean.
+
+```{r, echo=FALSE}
+summary(dataset)
+```
+## Exploratory Data Analysis Dataset 1 ~ Correlations between independent variables.
+
+```{r, echo=FALSE}
+corr1<-cor(dataset[1:6], dataset[1:6])
+corr1
+corrplot(corr1, type = "upper", order = "hclust")
+```
+The sacral slope and the pelvic incidence show the highest correlations, but pelvic incidence has a strong correlation with all of the variables except pelvic radius. Pelvic radius does not appear to be correlated with any of the other variables however. It is interesting to note that sacral slope is very poorly correlated with pelvic tilt, not withstanding is high correlation with pelvic incidence (which has a high correlation with pelvic tilt).
+
+## Exploratory Data Analysis Dataset 2 ~ Count of Normal vs. Abnormal outcomes. 
+
+```{r, echo=FALSE}
+ggplot(dataset_two,aes(x=class,fill=class))+geom_bar(stat = 'count')
+```
+## Random Forest to identify variables with most influence, Dataset 1
+
+```{r, echo=FALSE}
+RF_dataframe
+```
+The degree of Spondylolisthesis has a very high Mean Square Error (MSE), which suggests that it has the least influence over the outcome. 
+
+## Tree visualization Dataset 1 ~ supporting Random Forest dataframe
+
+```{r, echo=FALSE}
+plot(fit, margin = 0.1)
+text(fit, cex = 0.75)
+```
+## Random Forest to identify variables with most influence, Dataset 2
+
+```{r, echo=FALSE}
+RF_dataframe_two
+```
+
+When the two abnormal outcomes are combined into one 'abnormal' outcome, the degree of Spondylolisthesis shows more influence over the outcome. This suggests that continuing to include this variable is important. 
+
+## Tree visualization Dataset 2 ~ supporting Random Forest dataframe
+```{r, echo=FALSE}
+plot(fit_two, margin = 0.1)
+text(fit_two, cex = 0.75)
+```
+
+## Summary of Dataset 2 Training Set ~ Five Number Summary including Mean.
+
+```{r, echo=FALSE}
+summary(datasetTR)
+```
+## Knn using Dataset 2
+```{r, echo=FALSE}
+ggplot(knnfit)
+knnfit
+confusionMatrix(predict(knnfit, test), test$class)$overall["Accuracy"]
+```
+All of the values of k showed high accuracy, but **k = 15** was the highest. This showed a very high accuracy. A concern with this value of k is that higher values of k take longer to execute, and are susceptible to underfitting. However, this dataset is small enough that execution time is not a concern, and low values of k may need to overfitting. 
+
+## Classification Tree using Dataset 2
+```{r, echo=FALSE}
+plot(train_rpart)
+train_rpart
+confusionMatrix(predict(train_rpart, test), test$class)$overall["Accuracy"]
+```
+The classification tree shows a lower accuracy than the KNN evaluation. This is the same function run earlier as part of the exploratory data analysis, but in this case a tree was not plotted because the goal is to identify accuracy rather than visualize relationships. 
+
+
+# Conclusion
+The K-Nearest Neighbors algorythm showed higher accuracy that the classification tree process. This makes sense because while one variable (the degree of Spinal Spondylothisthesis) had significantly less influence over the outcomes, the others did show strong influence over the outcome. Further data analysis (additional correlations) should look at mixes of the variables, and pull out how much the other variables influence each other and how that can obscure how the variables actually influence the outcome (Normal or Abnormal Spines). Additionally, more information about how Normal and Abnormal are determined would be useful. It is possible that there are many borderline cases that could be considered either Normal or Abnormal which can cloud the results. Separating the outcomes into three does not make sense, because two categories are clearly Abnormal, however, changing the classifications to a continuous numerical scale could be very informative. Then the designation of Normal could be given for a range of results, which is more informative than simply a binary result. This would also allow for clearly understandable ranges of abnormal (from slightly abnormal to severely abnormal for example).
+
+
+
+
